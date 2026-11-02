@@ -58,10 +58,21 @@ On claude.ai, you can instead upload `skills/trending-repo-installer/SKILL.md` a
 
 Requirements: `git` and the GitHub CLI (`gh`). Install tools for the repos you pick (Python, Node, Rust, Go) are needed only for those.
 
+## Using it in ChatGPT
+
+The Claude skill relies on tools ChatGPT doesn't have (a shell, `gh`, direct API calls). For ChatGPT, use `chatgpt/instructions.md` instead:
+
+1. Create a Custom GPT (or a Project) and turn on Web Search.
+2. Paste the text below the divider in `chatgpt/instructions.md` into the Instructions field.
+3. Ask: "show me trending MCP servers this week".
+
+The ChatGPT version does the same finding, ranking, flagging and safety review, but it can't clone or install anything itself. It gives you the commands to run on your own machine.
+
 ## Repository layout
 
 ```
-skills/trending-repo-installer/SKILL.md   # the skill
+skills/trending-repo-installer/SKILL.md   # Claude skill
+chatgpt/instructions.md                   # ChatGPT version
 README.md
 LICENSE
 ```
