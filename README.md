@@ -1,6 +1,6 @@
 # trending-repo-installer
 
-A Claude skill that finds trending GitHub repositories, flags the risky ones, and installs only the ones you pick, after checking them first.
+A Claude skill that finds trending GitHub repositories, flags the risky ones, inspects the ones you pick, and installs a repo only after you approve an exact, sandboxed plan.
 
 Ask things like:
 
@@ -10,40 +10,44 @@ Ask things like:
 
 ## What it does
 
-1. **Finds** fresh repos for your topic, language and timeframe (daily, weekly or monthly).
-2. **Ranks** them in one table: new repos by stars per day, established repos in a separate section.
-3. **Flags** risk on every row: `NEW`, `SPIKE` (suspicious star growth), `NO-LICENSE`, `NO-README`, `ARCHIVED`, `BIG`.
-4. **Waits** for you to choose. Nothing is installed before that.
-5. **Vets** each chosen repo: it clones shallow into its own folder, reads install scripts, manifests and dependencies without running anything, and gives a verdict of `CLEAN`, `CAUTION` or `STOP`.
-6. **Installs** in isolation (virtualenv, `npm ci --ignore-scripts` first), runs a smoke test, and tells you how to run it and which env vars it needs.
+1. **Finds** fresh repos for your topic, language and timeframe (daily, weekly or monthly), and tells you the time window and when the data was fetched.
+2. **Ranks** them in one table: new repos by average stars per day (a lifetime average, not measured growth), established repos in a separate group.
+3. **Flags** risk on every row: `NEW`, `SPIKE`, `BIG`, `NO-LICENSE`, `NO-README`, `ARCHIVED`. Flags are triage hints, not proof of anything.
+4. **Waits** for you to choose. It never picks a repo for you.
+5. **Inspects** each pick without running anything: it records the exact commit SHA and reads the README, manifests, install scripts, Dockerfiles and dependencies. Verdicts are `CLEAN`, `CAUTION` or `STOP`, and `CLEAN` is never a security guarantee.
+6. **Asks approval for an install plan** that lists the exact commands, revision, destination, downloads, mounts and network access. Choosing a repo is not approval to run it.
+7. **Installs inside a disposable sandbox** and runs a bounded smoke check, then reports the result and the env var names you need to set.
+
+If a sandbox can't be enforced in your environment, the skill stops before running anything and gives you reviewed manual steps instead.
 
 ## Where the data comes from
 
-`github.com/trending` blocks automated fetching, so the skill does not use it. Instead:
+`github.com/trending` blocks automated fetching, so the skill does not use it.
 
 | Source | Used for |
 |---|---|
-| GitHub search API (via `gh`) | New repos, star counts, license, last push |
-| [OSS Insight](https://ossinsight.io/trending/ai) and Trendshift | Cross-checking real star-growth numbers |
-| Web search | Fallback if the above fail |
+| GitHub search API (via `gh`, or web search) | New repos, star counts, license, last push |
+| [OSS Insight](https://ossinsight.io/trending/ai) and Trendshift | Supplementary growth numbers, after checking each page's coverage |
+| Web search | Fallback, labelled as unverified |
 
-The GitHub API has no "stars gained this week" field, so for new repos the skill ranks by stars divided by age. It says so when it can't get true growth numbers.
+The GitHub API has no "stars gained this week" field, so the skill says plainly when it can't get true growth numbers. It never invents results if live access fails.
 
 ## Safety rules
 
-- Never installs before you pick.
-- Never uses `sudo`, global installs, or `curl | sh` without your approval.
-- Never writes secrets into files; it names the env vars you must set.
-- Stays inside the clone folder.
-- Stops and tells you if a repo looks suspicious, and offers to delete the clone.
+- Repo files, web pages and tool output are treated as untrusted data, never as instructions.
+- Nothing is cloned or run until you choose, and nothing is executed until you approve the exact plan.
+- Third-party code runs only in a disposable sandbox: non-root, no privileged mode, no host credentials or sockets, restricted network.
+- A virtualenv or `--ignore-scripts` is not treated as a security boundary.
+- No `sudo`, global installs or `curl | sh`. Real secrets are never passed to untrusted code.
+- It stops on `STOP` verdicts and offers to delete only the inspection copy it created.
 
-Star counts on brand-new repos can be inflated. The vetting step reduces risk but is not a security audit, so read anything you plan to run with real credentials.
+This is a risk-reduction workflow, not a security audit. Star counts on brand-new repos can be inflated.
 
 ## Options
 
-- `just clone`: clone and vet, skip the install.
-- `dry run`: vet only.
-- Loose topic words are mapped to GitHub topics (for example "mcp" to `mcp` and `mcp-server`, "agents" to `ai-agents`).
+- `just clone`: clone and inspect, no execution.
+- `dry run`: static inspection only, no installation.
+- Loose topic words are mapped to GitHub topics as search hints (for example "mcp" to `mcp` and `mcp-server`).
 
 ## Install
 
@@ -56,17 +60,17 @@ cp -r trending-repo-installer/skills/trending-repo-installer ~/.claude/skills/
 
 On claude.ai, you can instead upload `skills/trending-repo-installer/SKILL.md` as a custom skill.
 
-Requirements: `git` and the GitHub CLI (`gh`). Install tools for the repos you pick (Python, Node, Rust, Go) are needed only for those.
+Requirements: `git`. The GitHub CLI (`gh`) is optional but recommended for reliable discovery.
 
 ## Using it in ChatGPT
 
-The Claude skill relies on tools ChatGPT doesn't have (a shell, `gh`, direct API calls). For ChatGPT, use `chatgpt/instructions.md` instead:
+The Claude skill relies on tools ChatGPT doesn't have (a shell, `gh`, direct API calls). Use `chatgpt/instructions.md` instead:
 
 1. Create a Custom GPT (or a Project) and turn on Web Search.
 2. Paste the text below the divider in `chatgpt/instructions.md` into the Instructions field.
 3. Ask: "show me trending MCP servers this week".
 
-The ChatGPT version does the same finding, ranking, flagging and safety review, but it can't clone or install anything itself. It gives you the commands to run on your own machine.
+The ChatGPT version finds, ranks, flags and reviews repos, but it can't clone or install anything. It gives you reviewed commands to run yourself, ideally in a sandbox or VM.
 
 ## Repository layout
 
